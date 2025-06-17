@@ -1,0 +1,14 @@
+[package]
+org = "tharmigan"
+name = "message_store_message_processor"
+version = "0.1.0"
+distribution = "2201.12.6"
+
+[build-options]
+observabilityIncluded = true
+
+[[dependency]]
+org = "tharmigan"
+name = "messaging.storeprocessor"
+version = "0.1.0"
+repository = "local"
