@@ -32,8 +32,8 @@ service on msgStoreListener {
     public isolated function onMessage(anydata payload) returns error? {
         Message message = check payload.toJson().fromJsonWithType();
         log:printInfo("start processing message", id = message.id, content = message.content);
-        if message.id.equalsIgnoreCaseAscii("1") {
-            return error("Simulated processing failure for message with id 1");
+        if !re `^[a-zA-Z0-9_-]+$`.isFullMatch(message.id) {
+            return error("id should not contain special characters", id = message.id);
         }
     }
 }
