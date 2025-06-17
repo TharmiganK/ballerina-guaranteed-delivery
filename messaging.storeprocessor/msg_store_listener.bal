@@ -163,7 +163,7 @@ isolated class PollAndProcessMessages {
             log:printDebug("no retries configured", payload = message);
         } else {
             int retries = 0;
-            while retries <= self.config.maxRetries {
+            while retries < self.config.maxRetries {
                 error? retryResult = self.messageStoreService.onMessage(message);
                 retries += 1;
                 if retryResult is error {
