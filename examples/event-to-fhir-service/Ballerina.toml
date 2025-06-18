@@ -18,9 +18,3 @@ optimizeDependencyCompilation = true
 # name = "messaging.replayablechannel"
 # version = "0.1.0"
 # repository = "local"
-
-# [[dependency]]
-# org = "tharmigan"
-# name = "mirth"
-# version = "0.1.0"
-# repository = "local"
