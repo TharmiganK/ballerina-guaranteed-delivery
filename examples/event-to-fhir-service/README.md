@@ -5,7 +5,9 @@ This service seamlessly accepts custom health data events, transforms them into 
 - Persists them in a configured FHIR repository.
 - Sends them to an external HTTP endpoint for additional processing.
 - Stores the processed messages in a dedicated `processed_data` directory.
-- Archives failed messages in a `dls` (Dead Letter Storage) directory for review and replay.
+- Archives failed messages in a `failure` directory for review and replay.
+- Provides a replay mechanism for failed messages, allowing them to be reprocessed after issues are resolved.
+- The message which is failed to be replayed with the configured retry count will be moved to a Dead Letter Storage (DLS) directory - `dls` for further investigation.
 
 ## Overview
 
@@ -82,12 +84,12 @@ Getting the Event to FHIR Service up and running is straightforward. Follow thes
 
 ## Review and Replay Failed Messages
 
-The Event to FHIR Service incorporates a robust error handling mechanism. Messages that fail processing are automatically moved to a Dead Letter Storage (DLS) directory.
+The Event to FHIR Service incorporates a robust error handling mechanism. Messages that fail processing are automatically moved to a failure directory.
 
 ### Reviewing Failed Messages
 
-All failed messages, along with their corresponding error details, are stored in the `dls` directory. Each file in this directory represents a failed message, and its content will include both the original message and the reason for its failure. Regularly review this directory to identify and resolve underlying issues.
+All failed messages, along with their corresponding error details, are stored in the `failure` directory. Each file in this directory represents a failed message, and its content will include both the original message and the reason for its failure. Regularly review this directory to identify and resolve underlying issues.
 
 ### Replaying Failed Messages
 
-Once you've identified and resolved the cause of a message failure, you can easily replay it. To do this, simply move the failed message file from the `dls` directory to the `replay` directory. The service continuously monitors the replay directory. Any files moved into it will be automatically picked up and re-attempted for processing.
+Once you've identified and resolved the cause of a message failure, you can easily replay it. To do this, simply move the failed message file from the `failure` directory to the `replay` directory. The service continuously monitors the replay directory. Any files moved into it will be automatically picked up and re-attempted for processing. If the replay is successful in any of the retries, the message will be removed from the `replay` directory. If the replay fails after all configured retries, the message will be moved to the `dls` (Dead Letter Storage) directory for further investigation.

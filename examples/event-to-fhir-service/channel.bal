@@ -1,41 +1,37 @@
 import tharmigan/messaging.storeprocessor;
-import tharmigan/mirth;
+import tharmigan/messaging.replayablechannel;
 
-final mirth:Channel msgChannel;
+final replayablechannel:Channel msgChannel;
 
 configurable "in-memory"|"rabbitmq"|"directory" storeType = "directory";
 
-final storeprocessor:MessageStore failureStore;
-final storeprocessor:MessageStore replayStore;
+final storeprocessor:MessageStore failureStore = check getMessageStore(storeType, "failure");
+final storeprocessor:MessageStore replayStore = check getMessageStore(storeType, "replay");
+final storeprocessor:MessageStore deadLetterStore = check getMessageStore(storeType, "dls");
+
+function getMessageStore("in-memory"|"rabbitmq"|"directory" storeType, "failure"|"dls"|"replay" storeName) returns storeprocessor:MessageStore|error {
+    if storeType == "rabbitmq" {
+        string queueName = storeName == "failure" ? "messages.bi.failure" : storeName == "dls" ? "messages.bi.dlq" : "messages.bi.replay";
+        return new storeprocessor:RabbitMqMessageStore(queueName);
+    } else if storeType == "in-memory" {
+        return new storeprocessor:InMemoryMessageStore();
+    } else {
+        string dirName = storeName == "failure" ? "failure" : storeName == "dls" ? "dls" : "replay";
+        return new storeprocessor:LocalDirectoryMessageStore(dirName);
+    }
+}
 
 function init() returns error? {
-
-    if storeType == "rabbitmq" {
-        failureStore = check new storeprocessor:RabbitMqMessageStore("messages.bi.dlq");
-        replayStore = check new storeprocessor:RabbitMqMessageStore("messages.bi");
-    } else if storeType == "in-memory" {
-        failureStore = new storeprocessor:InMemoryMessageStore();
-        replayStore = new storeprocessor:InMemoryMessageStore();
-    } else {
-        failureStore = new storeprocessor:LocalDirectoryMessageStore("dls");
-        replayStore = new storeprocessor:LocalDirectoryMessageStore("replay");
-    }
-
-    msgChannel = check new ("event-to-fhir", {
-        sourceFlow: [
+    msgChannel = check new (
+        sourceFlow = [
             hasEventDataType,
             extractPayload,
             routeByDataType
         ],
-        destinationsFlow: [
+        destinationsFlow = [
             sendToFHIRServer,
             writePayloadToFile,
             sendToHttpEp
-        ],
-        failureStore: failureStore,
-        replayConfig: {
-            replayStore: replayStore,
-            pollingInterval: 10
-        }
-    });
+        ]
+    );
 }
