@@ -1,0 +1,26 @@
+[package]
+org = "tharmigan"
+name = "event_to_fhir_service"
+version = "0.1.0"
+distribution = "2201.12.6"
+
+[build-options]
+optimizeDependencyCompilation = true
+
+# [[dependency]]
+# org = "tharmigan"
+# name = "messaging.storeprocessor"
+# version = "0.1.0"
+# repository = "local"
+
+# [[dependency]]
+# org = "tharmigan"
+# name = "messaging.replayablechannel"
+# version = "0.1.0"
+# repository = "local"
+
+# [[dependency]]
+# org = "tharmigan"
+# name = "mirth"
+# version = "0.1.0"
+# repository = "local"
