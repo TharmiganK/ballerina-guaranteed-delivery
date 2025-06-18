@@ -34,15 +34,12 @@ isolated class SkippedDestination {
 public isolated class Channel {
     final readonly & Processor[] sourceProcessors;
     final readonly & (DestinationRouter|DestinationWithProcessors[]) destinations;
-    final string name;
 
     # Initializes a new instance of Channel with the provided processors and destination.
     #
-    # + name - The unique name to identify the channel.
     # + config - The configuration for the channel, which includes source flow and destinations flow.
     # + return - An error if the channel could not be initialized, otherwise returns `()`.
-    public isolated function init(string name, *ChannelConfiguration config) returns Error? {
-        self.name = name;
+    public isolated function init(*ChannelConfiguration config) returns Error? {
         readonly & SourceFlow sourceFlow = config.sourceFlow.cloneReadOnly();
         if sourceFlow is Processor {
             self.sourceProcessors = [sourceFlow];
@@ -247,10 +244,6 @@ public isolated class Channel {
             msgContext.setErrorMessage(errorMsg.trim());
         }
         return error ExecutionError(errorMsg, message = {...msgContext.toRecord()});
-    }
-
-    isolated function getName() returns string {
-        return self.name;
     }
 }
 
