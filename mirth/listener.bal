@@ -12,6 +12,7 @@ isolated function startReplayListener(Channel channel, ReplayListenerConfigurati
     do {
         storeprocessor:Listener replayListener = check new (
             messageStore = targetStore,
+            deadLetterStore = config.deadLetterStore,
             maxRetries = config.maxRetries,
             pollingInterval = config.pollingInterval
         );

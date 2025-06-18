@@ -351,7 +351,7 @@ modules = [
 [[package]]
 org = "tharmigan"
 name = "mirth"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "lang.runtime"},

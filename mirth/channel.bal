@@ -19,10 +19,13 @@ public type ChannelConfiguration record {|
 # Represents the configuration for the replay listener that listens to the message store and replays 
 # messages.
 #
-# + replayStore - The message store which is listened by the listener. If not provided, the listener
+# + replayStore - The message store which is listened by the listener. If not provided, the listener 
 # will be listened to the failure store defined in the channel configuration
+# + deadLetterStore - The dead letter store where the messsages failed to process by the replay listener
+# are stored.
 public type ReplayListenerConfiguration record {|
     storeprocessor:MessageStore replayStore?;
+    storeprocessor:MessageStore deadLetterStore?;
     *storeprocessor:ListenerConfiguration;
 |};
 
