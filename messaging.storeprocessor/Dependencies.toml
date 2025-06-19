@@ -73,6 +73,17 @@ version = "0.0.0"
 
 [[package]]
 org = "ballerina"
+name = "lang.runtime"
+version = "0.0.0"
+dependencies = [
+	{org = "ballerina", name = "jballerina.java"}
+]
+modules = [
+	{org = "ballerina", packageName = "lang.runtime", moduleName = "lang.runtime"}
+]
+
+[[package]]
+org = "ballerina"
 name = "lang.value"
 version = "0.0.0"
 dependencies = [
@@ -161,10 +172,11 @@ modules = [
 [[package]]
 org = "tharmigan"
 name = "messaging.storeprocessor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
 	{org = "ballerina", name = "file"},
 	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "lang.runtime"},
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "task"},
 	{org = "ballerina", name = "uuid"},

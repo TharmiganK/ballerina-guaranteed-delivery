@@ -1,16 +1,19 @@
 import ballerina/log;
 import ballerina/task;
+import ballerina/lang.runtime;
 
 # Represents the message store listener configuration,
 #
 # + pollingInterval - The interval in seconds at which the listener polls for new messages
 # + maxRetries - The maximum number of retries for processing a message
+# + retryInterval - The interval in seconds between retries for processing a message
 # + dropMessageAfterMaxRetries - If true, the message will be dropped after the maximum number of retries is reached
 # + deadLetterStore - An optional message store to store messages that could not be processed after the maximum number of retries.
 # When set, `dropMessageAfterMaxRetries` will be ignored
 public type ListenerConfiguration record {|
     decimal pollingInterval = 1;
     int maxRetries = 3;
+    decimal retryInterval = 1;
     boolean dropMessageAfterMaxRetries = false;
     MessageStore deadLetterStore?;
 |};
@@ -32,6 +35,12 @@ public isolated class Listener {
         self.messageStore = messageStore;
         if config.maxRetries < 0 {
             return error("maxRetries cannot be negative");
+        }
+        if config.pollingInterval <= 0d {
+            return error("pollingInterval must be greater than zero");
+        }
+        if config.retryInterval <= 0d {
+            return error("retryInterval must be greater than zero");
         }
         self.config = {
             pollingInterval: config.pollingInterval,
@@ -127,6 +136,7 @@ isolated class PollAndProcessMessages {
     private final decimal pollingInterval;
     private final int maxRetries;
     private final boolean dropMessageAfterMaxRetries;
+    private final decimal retryInterval;
     private MessageStore? deadLetterStore = ();
 
     public isolated function init(MessageStore messageStore, Service messageStoreService,
@@ -135,6 +145,7 @@ isolated class PollAndProcessMessages {
         self.messageStoreService = messageStoreService;
         self.pollingInterval = config.pollingInterval;
         self.maxRetries = config.maxRetries;
+        self.retryInterval = config.retryInterval;
         self.dropMessageAfterMaxRetries = config.dropMessageAfterMaxRetries;
         self.deadLetterStore = config.deadLetterStore;
     }
@@ -179,6 +190,7 @@ isolated class PollAndProcessMessages {
                     self.ackMessage();
                     return;
                 }
+                runtime:sleep(self.retryInterval);
             }
         }
         MessageStore? dls;
