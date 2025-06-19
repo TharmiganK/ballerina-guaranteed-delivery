@@ -8,16 +8,16 @@ import ballerinax/health.fhir.r4;
 configurable string fhirServerUrl = ?;
 configurable string tokenUrl = ?;
 configurable string[] scopes = ?;
-configurable string client_id = ?;
-configurable string client_secret = ?;
+configurable string clientId = ?;
+configurable string clientSecret = ?;
 
 final fhir:FHIRConnector fhirConnectorObj = check new ({
     baseURL: fhirServerUrl,
     mimeType: fhir:FHIR_JSON,
     authConfig: {
         tokenUrl: tokenUrl,
-        clientId: client_id,
-        clientSecret: client_secret,
+        clientId: clientId,
+        clientSecret: clientSecret,
         scopes: scopes,
         optionalParams: {
             "resource": fhirServerUrl
