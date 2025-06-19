@@ -321,14 +321,14 @@ isolated function getDestionationWithProcessors(DestinationFlow destinationFlow)
     return destinationFlow is DestinationWithProcessors ? destinationFlow : [[], destinationFlow];
 }
 
-isolated function validateProcessors(Processor[] processors) returns Error? {
-    foreach Processor processor in processors {
-        string|error processorName = trap getProcessorName(processor);
-        if processorName is Error {
-            return processorName;
-        }
-    }
-}
+// isolated function validateProcessors(Processor[] processors) returns Error? {
+//     foreach Processor processor in processors {
+//         string|error processorName = trap getProcessorName(processor);
+//         if processorName is Error {
+//             return processorName;
+//         }
+//     }
+// }
 
 isolated function getProcessorName(Processor processor) returns string {
     string? name = (typeof processor).@ProcessorConfig?.name;
@@ -350,23 +350,23 @@ isolated function getProcessorName(Processor processor) returns string {
     return name;
 };
 
-isolated function validateDestinations(DestinationRouter|DestinationWithProcessors[] destinations)
-        returns Error? {
-    if destinations is DestinationRouter {
-        string|error routerName = trap getDestinationRouterName(destinations);
-        if routerName is Error {
-            return routerName;
-        }
-    } else {
-        foreach [[Processor...], Destination] [processors, destination] in destinations {
-            check validateProcessors(processors);
-            string|error destinationName = trap getDestinationName(destination);
-            if destinationName is Error {
-                return error Error("Destination name is not defined for one or more destinations.");
-            }
-        }
-    }
-}
+// isolated function validateDestinations(DestinationRouter|DestinationWithProcessors[] destinations)
+//         returns Error? {
+//     if destinations is DestinationRouter {
+//         string|error routerName = trap getDestinationRouterName(destinations);
+//         if routerName is Error {
+//             return routerName;
+//         }
+//     } else {
+//         foreach [[Processor...], Destination] [processors, destination] in destinations {
+//             check validateProcessors(processors);
+//             string|error destinationName = trap getDestinationName(destination);
+//             if destinationName is Error {
+//                 return error Error("Destination name is not defined for one or more destinations.");
+//             }
+//         }
+//     }
+// }
 
 isolated function getDestinationName(Destination destination) returns string {
     string? name = (typeof destination).@DestinationConfig?.name;
