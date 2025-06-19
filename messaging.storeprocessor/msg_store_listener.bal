@@ -3,13 +3,16 @@ import ballerina/task;
 
 # Represents the message store listener configuration,
 #
-# + pollingInterval - The interval in seconds at which the listener polls for new messages.
-# + maxRetries - The maximum number of retries for processing a message.
-# + dropMessageAfterMaxRetries - If true, the message will be dropped after the maximum number of retries is reached.
+# + pollingInterval - The interval in seconds at which the listener polls for new messages
+# + maxRetries - The maximum number of retries for processing a message
+# + dropMessageAfterMaxRetries - If true, the message will be dropped after the maximum number of retries is reached
+#  + deadLetterStore - An optional message store to store messages that could not be processed after the maximum number of retries.
+# When set, `dropMessageAfterMaxRetries` will be ignored
 public type ListenerConfiguration record {|
     decimal pollingInterval = 1;
     int maxRetries = 3;
     boolean dropMessageAfterMaxRetries = false;
+    MessageStore deadLetterStore?;
 |};
 
 # Represents a message store listener that polls messages from a message store and processes them.
@@ -19,28 +22,33 @@ public isolated class Listener {
     private MessageStore? deadLetterStore = ();
     private Service? messageStoreService = ();
     private task:JobId? pollJobId = ();
-    private final readonly & ListenerConfiguration config;
+    private final ListenerConfiguration config;
 
     # Initializes a new instance of Message Store Listener.
     #
     # + messageStore - The message store to retrieve messages from
     # + config - The configuration for the message store listener
     # + return - An error if the listener could not be initialized, or `()`
-    public isolated function init(MessageStore messageStore, MessageStore? deadLetterStore = (), *ListenerConfiguration config) returns error? {
+    public isolated function init(MessageStore messageStore, *ListenerConfiguration config) returns error? {
         self.messageStore = messageStore;
-        self.deadLetterStore = deadLetterStore;
+        self.deadLetterStore = config.deadLetterStore;
         if config.maxRetries < 0 {
             return error("maxRetries cannot be negative");
         }
-        self.config = config.cloneReadOnly();
+        self.config = {
+            pollingInterval: config.pollingInterval,
+            maxRetries: config.maxRetries,
+            dropMessageAfterMaxRetries: config.dropMessageAfterMaxRetries,
+            deadLetterStore: config.deadLetterStore
+        };
 
     }
 
     # Attaches a message store service to the listener. Only one service can be attached to this listener.
     #
-    # + msgStoreService - The message store service to attach.
-    # + path - The path is not relevant for this listener. Only allowing a nil value.
-    # + return - An error if the service could not be attached, or `()`.
+    # + msgStoreService - The message store service to attach
+    # + path - The path is not relevant for this listener. Only allowing a nil value
+    # + return - An error if the service could not be attached, or a nil value
     public isolated function attach(Service msgStoreService, () path = ()) returns error? {
         lock {
             if self.messageStoreService is Service {
@@ -52,8 +60,8 @@ public isolated class Listener {
 
     # Detaches the message store service from the listener.
     #
-    # + msgStoreService - The message store service to detach.
-    # + return - An error if the service could not be detached, or `()`.
+    # + msgStoreService - The message store service to detach
+    # + return - An error if the service could not be detached, or a nil value
     public isolated function detach(Service msgStoreService) returns error? {
         lock {
             Service? currentService = self.messageStoreService;
@@ -70,7 +78,7 @@ public isolated class Listener {
 
     # Starts the message store listener to poll and process messages.
     #
-    # + return - An error if the listener could not be started, or `()`.
+    # + return - An error if the listener could not be started, or a nil value
     public isolated function 'start() returns error? {
         lock {
             Service? currentService = self.messageStoreService;
@@ -91,7 +99,7 @@ public isolated class Listener {
 
     # Gracefully stops the message store listener.
     #
-    # + return - An error if the listener could not be stopped, or `()`.
+    # + return - An error if the listener could not be stopped, or a nil value
     public isolated function gracefulStop() returns error? {
         lock {
             task:JobId? pollJobId = self.pollJobId;
@@ -122,14 +130,19 @@ isolated class PollAndProcessMessages {
 
     private final MessageStore messageStore;
     private final Service messageStoreService;
-    private final readonly & ListenerConfiguration config;
+    private final ListenerConfiguration config;
     private MessageStore? deadLetterStore = ();
 
     public isolated function init(MessageStore messageStore, Service messageStoreService,
-            readonly & ListenerConfiguration config, MessageStore? deadLetterStore = ()) {
+            ListenerConfiguration config, MessageStore? deadLetterStore = ()) {
         self.messageStore = messageStore;
         self.messageStoreService = messageStoreService;
-        self.config = config;
+        self.config = {
+            pollingInterval: config.pollingInterval,
+            maxRetries: config.maxRetries,
+            dropMessageAfterMaxRetries: config.dropMessageAfterMaxRetries,
+            deadLetterStore: config.deadLetterStore
+        };
         self.deadLetterStore = deadLetterStore;
     }
 
@@ -159,24 +172,23 @@ isolated class PollAndProcessMessages {
         }
         log:printError("error processing message", 'error = result);
 
-        if self.config.maxRetries <= 0 {
-            log:printDebug("no retries configured", payload = message);
-        } else {
-            int retries = 0;
-            while retries < self.config.maxRetries {
-                error? retryResult = self.messageStoreService.onMessage(message);
-                retries += 1;
-                if retryResult is error {
-                    log:printError("error processing message on retry", attempt = retries, 'error = retryResult);
-                } else {
-                    log:printDebug("message processed successfully on retry", attempt = retries, payload = message);
-                    self.ackMessage();
-                    return;
+        lock {
+            if self.config.maxRetries <= 0 {
+                log:printDebug("no retries configured", payload = message);
+            } else {
+                int retries = 0;
+                while retries < self.config.maxRetries {
+                    error? retryResult = self.messageStoreService.onMessage(message.clone());
+                    retries += 1;
+                    if retryResult is error {
+                        log:printError("error processing message on retry", attempt = retries, 'error = retryResult);
+                    } else {
+                        log:printDebug("message processed successfully on retry", attempt = retries, payload = message);
+                        self.ackMessage();
+                        return;
+                    }
                 }
             }
-        }
-
-        lock {
             MessageStore? dls = self.deadLetterStore;
             if dls is MessageStore {
                 error? dlsResult = dls.store(message.clone());
@@ -188,14 +200,13 @@ isolated class PollAndProcessMessages {
                     return;
                 }
             }
+            if self.config.dropMessageAfterMaxRetries {
+                log:printDebug("max retries reached, dropping message", payload = message);
+            } else {
+                log:printError("max retries reached, message is kept in the store", payload = message);
+            }
+            self.ackMessage(self.config.dropMessageAfterMaxRetries);
         }
-
-        if self.config.dropMessageAfterMaxRetries {
-            log:printDebug("max retries reached, dropping message", payload = message);
-        } else {
-            log:printError("max retries reached, message is kept in the store", payload = message);
-        }
-        self.ackMessage(self.config.dropMessageAfterMaxRetries);
     }
 }
 
@@ -204,7 +215,7 @@ public type Service distinct isolated service object {
 
     # This function is called when a new message is received from the message store.
     #
-    # + message - The message to be processed.
-    # + return - An error if the message could not be processed, or `()`.
+    # + message - The message to be processed
+    # + return - An error if the message could not be processed, or a nil value
     public isolated function onMessage(anydata message) returns error?;
 };
