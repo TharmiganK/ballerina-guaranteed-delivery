@@ -121,7 +121,11 @@ public isolated class Channel {
         MessageContext msgContext = new (message);
         log:printDebug("replay channel execution started", msgId = msgContext.getId());
         msgContext.cleanErrorInfoForReplay();
-        return self.executeInternal(msgContext);
+        ExecutionResult|ExecutionError result = self.executeInternal(msgContext);
+        if result is ExecutionError {
+            self.storeFailedMessage(result, msgContext);
+        }
+        return result;
     }
 
     # Dispatch a message to the channel for processing with the defined processors and destinations.
@@ -133,7 +137,24 @@ public isolated class Channel {
         string id = uuid:createType1AsString();
         MessageContext msgContext = new (id = id, content = content, metadata = {skipDestinations: skipDestinations});
         log:printDebug("channel execution started", msgId = id);
-        return self.executeInternal(msgContext);
+        ExecutionResult|ExecutionError result = self.executeInternal(msgContext);
+        if result is ExecutionError {
+            self.storeFailedMessage(result, msgContext);
+        }
+        return result;
+    }
+
+    isolated function storeFailedMessage(ExecutionError executionError, MessageContext msgContext) {
+        storeprocessor:MessageStore? failureStore = self.getFailureStore();
+        if failureStore is () {
+            log:printDebug("no failure store is defined, skipping storing the failed message", msgId = msgContext.getId(), channel = self.getName());
+            return;
+        }
+        error? storeResult = failureStore.store(executionError.detail().message);
+        if storeResult is error {
+            log:printError("failed to store the message in the failure store", msgId = msgContext.getId(), channel = self.getName(), 'error = storeResult);
+        }
+        log:printDebug("message stored in the failure store", msgId = msgContext.getId(), channel = self.getName());
     }
 
     isolated function executeInternal(MessageContext msgContext) returns ExecutionResult|ExecutionError {
