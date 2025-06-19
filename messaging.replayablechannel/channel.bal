@@ -1,6 +1,8 @@
 import ballerina/log;
 import ballerina/uuid;
 
+import tharmigan/messaging.storeprocessor;
+
 # Represents the flow of the message in the channel, which includes the source flow and the destinations flow.
 #
 # + sourceFlow - The source flow that processes the message context.
@@ -12,8 +14,25 @@ public type MessageFlow record {|
 |};
 
 # Represent the configuration for a channel.
+#
+# + failureStore - The store to use for storing messages that failed to process
+# + replayListenerConfig - The configuration for replaying messages in the channel.
 public type ChannelConfiguration record {|
     *MessageFlow;
+    storeprocessor:MessageStore failureStore?;
+    ReplayListenerConfiguration replayListenerConfig?;
+|};
+
+# Represents the replay listener configuration for the channel.
+# 
+#  + replayStore - The store which is listened to for replaying messages. If not set, 
+# the channel's failure store will be used.
+#  + deadLetterStore - The store to use for storing messages that could not be processed 
+# after the maximum number of replay attempts.
+public type ReplayListenerConfiguration record {|
+    *storeprocessor:ListenerConfiguration;
+    storeprocessor:MessageStore replayStore?;
+    storeprocessor:MessageStore deadLetterStore?;
 |};
 
 isolated class SkippedDestination {
@@ -34,12 +53,16 @@ isolated class SkippedDestination {
 public isolated class Channel {
     final readonly & Processor[] sourceProcessors;
     final readonly & (DestinationRouter|DestinationWithProcessors[]) destinations;
+    private storeprocessor:MessageStore? failureStore = ();
+    private string name;
 
     # Initializes a new instance of Channel with the provided processors and destination.
     #
+    # + name - The name of the channel.
     # + config - The configuration for the channel, which includes source flow and destinations flow.
     # + return - An error if the channel could not be initialized, otherwise returns `()`.
-    public isolated function init(*ChannelConfiguration config) returns Error? {
+    public isolated function init(string name, *ChannelConfiguration config) returns Error? {
+        self.name = name;
         readonly & SourceFlow sourceFlow = config.sourceFlow.cloneReadOnly();
         if sourceFlow is Processor {
             self.sourceProcessors = [sourceFlow];
@@ -63,6 +86,30 @@ public isolated class Channel {
                 destinationFlows.push(getDestionationWithProcessors(destinationFlow).cloneReadOnly());
             }
             self.destinations = destinationFlows.cloneReadOnly();
+        }
+
+        self.failureStore = config.failureStore;
+        ReplayListenerConfiguration? replayListenerConfig = config.replayListenerConfig;
+        if replayListenerConfig is ReplayListenerConfiguration {
+            check startReplayListener(self, replayListenerConfig);
+        }
+    }
+
+    # Get the name of the channel.
+    #
+    # + return - Returns the name of the channel
+    public isolated function getName() returns string {
+        lock {
+            return self.name;
+        }
+    }
+
+    # Get the failure store of the channel.
+    #
+    # + return - Returns the failure store of the channel, or a nil value if no failure store is defined.
+    public isolated function getFailureStore() returns storeprocessor:MessageStore? {
+        lock {
+            return self.failureStore;
         }
     }
 
