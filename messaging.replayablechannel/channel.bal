@@ -5,9 +5,9 @@ import tharmigan/messaging.storeprocessor;
 
 # Represents the flow of the message in the channel, which includes the source flow and the destinations flow.
 #
-# + sourceFlow - The source flow that processes the message context.
+# + sourceFlow - The source flow that processes the message context
 # + destinationsFlow - The destinations flow that processes the message context and sends the 
-# message to one or more destinations.
+# message to one or more destinations
 public type MessageFlow record {|
     SourceFlow sourceFlow;
     DestinationsFlow destinationsFlow;
@@ -16,7 +16,7 @@ public type MessageFlow record {|
 # Represent the configuration for a channel.
 #
 # + failureStore - The store to use for storing messages that failed to process
-# + replayListenerConfig - The configuration for replaying messages in the channel.
+# + replayListenerConfig - The configuration for replaying messages in the channel
 public type ChannelConfiguration record {|
     *MessageFlow;
     storeprocessor:MessageStore failureStore?;
@@ -26,9 +26,9 @@ public type ChannelConfiguration record {|
 # Represents the replay listener configuration for the channel.
 # 
 #  + replayStore - The store which is listened to for replaying messages. If not set, 
-# the channel's failure store will be used.
+# the channel's failure store will be used
 #  + deadLetterStore - The store to use for storing messages that could not be processed 
-# after the maximum number of replay attempts.
+# after the maximum number of replay attempts
 public type ReplayListenerConfiguration record {|
     *storeprocessor:ListenerConfiguration;
     storeprocessor:MessageStore replayStore?;
@@ -58,9 +58,9 @@ public isolated class Channel {
 
     # Initializes a new instance of Channel with the provided processors and destination.
     #
-    # + name - The name of the channel.
-    # + config - The configuration for the channel, which includes source flow and destinations flow.
-    # + return - An error if the channel could not be initialized, otherwise returns `()`.
+    # + name - The name of the channel
+    # + config - The configuration for the channel, which includes source flow and destinations flow
+    # + return - An error if the channel could not be initialized, otherwise returns a nil value
     public isolated function init(string name, *ChannelConfiguration config) returns Error? {
         self.name = name;
         readonly & SourceFlow sourceFlow = config.sourceFlow.cloneReadOnly();
@@ -106,7 +106,7 @@ public isolated class Channel {
 
     # Get the failure store of the channel.
     #
-    # + return - Returns the failure store of the channel, or a nil value if no failure store is defined.
+    # + return - Returns the failure store of the channel, or a nil value if no failure store is defined
     public isolated function getFailureStore() returns storeprocessor:MessageStore? {
         lock {
             return self.failureStore;
@@ -115,14 +115,15 @@ public isolated class Channel {
 
     # Replay the channel execution flow.
     #
-    # + message - The message to replay process.
-    # + return - Returns an error if the message could not be processed, otherwise returns the execution result.
-    public isolated function replay(Message message) returns ExecutionResult|ExecutionError {
+    # + skipFailureStore - If true, the failure store will not be used to store the failed message. Default is true
+    # + message - The message to replay process
+    # + return - Returns an error if the message could not be processed, otherwise returns the execution result
+    public isolated function replay(Message message, boolean skipFailureStore = true) returns ExecutionResult|ExecutionError {
         MessageContext msgContext = new (message);
         log:printDebug("replay channel execution started", msgId = msgContext.getId());
         msgContext.cleanErrorInfoForReplay();
         ExecutionResult|ExecutionError result = self.executeInternal(msgContext);
-        if result is ExecutionError {
+        if !skipFailureStore && result is ExecutionError {
             self.storeFailedMessage(result, msgContext);
         }
         return result;
@@ -130,9 +131,9 @@ public isolated class Channel {
 
     # Dispatch a message to the channel for processing with the defined processors and destinations.
     #
-    # + content - The message content to be processed.
-    # + skipDestinations - An array of destination names to skip during execution.
-    # + return - Returns the execution result or an error if the processing failed.
+    # + content - The message content to be processed
+    # + skipDestinations - An array of destination names to skip during execution
+    # + return - Returns the execution result or an error if the processing failed
     public isolated function execute(anydata content, string[] skipDestinations = []) returns ExecutionResult|ExecutionError {
         string id = uuid:createType1AsString();
         MessageContext msgContext = new (id = id, content = content, metadata = {skipDestinations: skipDestinations});

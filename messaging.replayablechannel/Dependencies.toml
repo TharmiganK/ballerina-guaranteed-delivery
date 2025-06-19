@@ -160,7 +160,7 @@ dependencies = [
 [[package]]
 org = "tharmigan"
 name = "messaging.replayablechannel"
-version = "0.3.0"
+version = "0.5.0"
 dependencies = [
 	{org = "ballerina", name = "lang.runtime"},
 	{org = "ballerina", name = "log"},
@@ -174,7 +174,7 @@ modules = [
 [[package]]
 org = "tharmigan"
 name = "messaging.storeprocessor"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
 	{org = "ballerina", name = "file"},
 	{org = "ballerina", name = "io"},
