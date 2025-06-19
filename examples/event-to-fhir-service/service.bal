@@ -17,13 +17,6 @@ service / on httpListener {
             replayablechannel:ExecutionResult|replayablechannel:ExecutionError result = msgChannel.execute(event);
             if result is replayablechannel:ExecutionError {
                 log:printError("error processing event", 'error = result);
-                // Store the message in the failure store
-                error? storeResult = failureStore.store(result.detail().message);
-                if storeResult is error {
-                    log:printError("failed to store message in the failure store", 'error = storeResult);
-                } else {
-                    log:printInfo("message stored in the failure store");
-                }
                 continue;
             }
             if !result.destinationResults.hasKey("FHIRServer") {

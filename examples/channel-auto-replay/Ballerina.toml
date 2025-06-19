@@ -1,6 +1,6 @@
 [package]
 org = "tharmigan"
-name = "channel_replay"
+name = "channel_auto_replay"
 version = "0.1.0"
 distribution = "2201.12.6"
 

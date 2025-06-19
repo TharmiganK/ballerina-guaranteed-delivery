@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.12.6"
+distribution-version = "2201.12.7"
 
 [[package]]
 org = "ballerina"
@@ -325,25 +325,7 @@ dependencies = [
 
 [[package]]
 org = "tharmigan"
-name = "reliable.messaging"
-version = "0.5.0"
-dependencies = [
-	{org = "ballerina", name = "file"},
-	{org = "ballerina", name = "io"},
-	{org = "ballerina", name = "lang.runtime"},
-	{org = "ballerina", name = "log"},
-	{org = "ballerina", name = "task"},
-	{org = "ballerina", name = "uuid"},
-	{org = "ballerinai", name = "observe"},
-	{org = "ballerinax", name = "rabbitmq"}
-]
-modules = [
-	{org = "tharmigan", packageName = "reliable.messaging", moduleName = "reliable.messaging"}
-]
-
-[[package]]
-org = "tharmigan"
-name = "simple_channel"
+name = "channel_auto_replay"
 version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "file"},
@@ -351,9 +333,40 @@ dependencies = [
 	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "log"},
 	{org = "ballerinai", name = "observe"},
-	{org = "tharmigan", name = "reliable.messaging"}
+	{org = "tharmigan", name = "messaging.replayablechannel"},
+	{org = "tharmigan", name = "messaging.storeprocessor"}
 ]
 modules = [
-	{org = "tharmigan", packageName = "simple_channel", moduleName = "simple_channel"}
+	{org = "tharmigan", packageName = "channel_auto_replay", moduleName = "channel_auto_replay"}
+]
+
+[[package]]
+org = "tharmigan"
+name = "messaging.replayablechannel"
+version = "0.5.0"
+dependencies = [
+	{org = "ballerina", name = "lang.runtime"},
+	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "uuid"},
+	{org = "tharmigan", name = "messaging.storeprocessor"}
+]
+modules = [
+	{org = "tharmigan", packageName = "messaging.replayablechannel", moduleName = "messaging.replayablechannel"}
+]
+
+[[package]]
+org = "tharmigan"
+name = "messaging.storeprocessor"
+version = "0.3.0"
+dependencies = [
+	{org = "ballerina", name = "file"},
+	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "task"},
+	{org = "ballerina", name = "uuid"},
+	{org = "ballerinax", name = "rabbitmq"}
+]
+modules = [
+	{org = "tharmigan", packageName = "messaging.storeprocessor", moduleName = "messaging.storeprocessor"}
 ]
 

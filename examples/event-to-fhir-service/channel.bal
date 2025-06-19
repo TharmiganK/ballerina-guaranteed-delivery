@@ -23,6 +23,7 @@ function getMessageStore("in-memory"|"rabbitmq"|"directory" storeType, "failure"
 
 function init() returns error? {
     msgChannel = check new (
+        name = "event-to-fhir-channel",
         sourceFlow = [
             hasEventDataType,
             extractPayload,
@@ -32,6 +33,13 @@ function init() returns error? {
             sendToFHIRServer,
             writePayloadToFile,
             sendToHttpEp
-        ]
+        ],
+        failureStore = failureStore,
+        replayListenerConfig = {
+            replayStore,
+            deadLetterStore,
+            maxRetries: 3,
+            pollingInterval: 10
+        }
     );
 }
