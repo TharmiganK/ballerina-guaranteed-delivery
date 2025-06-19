@@ -1,5 +1,5 @@
-import tharmigan/messaging.replayablechannel;
 import tharmigan/messaging.storeprocessor;
+import tharmigan/messaging.replayablechannel;
 
 configurable "in-memory"|"rabbitmq"|"directory" storeType = "directory";
 
@@ -20,17 +20,9 @@ function getMessageStore("in-memory"|"rabbitmq"|"directory" storeType, "failure"
 }
 
 final replayablechannel:Channel msgChannel = check new (
-    name = "event-to-fhir-channel",
-    sourceFlow = [
-        hasEventDataType,
-        extractPayload,
-        routeByDataType
-    ],
-    destinationsFlow = [
-        sendToFHIRServer,
-        writePayloadToFile,
-        sendToHttpEp
-    ],
+    name = "ccda-to-fhir-channel",
+    sourceFlow = transformToCCDAData,
+    destinationsFlow = sendToHttpEp,
     failureStore = failureStore,
     replayListenerConfig = {
         replayStore,
