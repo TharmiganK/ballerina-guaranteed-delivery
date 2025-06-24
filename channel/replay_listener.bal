@@ -1,23 +1,19 @@
 import ballerina/lang.runtime;
 import ballerina/log;
 
-import tharmigan/messaging.storeprocessor;
+import tharmigan/msgstore;
 
 isolated function startReplayListener(Channel channel, ReplayListenerConfiguration config) returns Error? {
     string channelName = channel.getName();
-    storeprocessor:MessageStore? targetStore = config.replayStore ?: channel.getFailureStore();
+    ReplayListenerConfiguration {replayStore: replayStore, ...listenerConfig} = config;
+    msgstore:MessageStore? targetStore = replayStore ?: channel.getFailureStore();
     if targetStore is () {
         log:printWarn("no replay store is configured, skipping the replay listener setup",
                 channel = channelName);
         return;
     }
     do {
-        storeprocessor:Listener replayListener = check new (targetStore, {
-            deadLetterStore: config.deadLetterStore,
-            maxRetries: config.maxRetries,
-            pollingInterval: config.pollingInterval,
-            dropMessageAfterMaxRetries: config.dropMessageAfterMaxRetries
-        });
+        msgstore:Listener replayListener = check new (targetStore, listenerConfig);
         ReplayService replayService = new (channel);
         check replayListener.attach(replayService);
         check replayListener.'start();
@@ -30,7 +26,7 @@ isolated function startReplayListener(Channel channel, ReplayListenerConfigurati
 }
 
 isolated service class ReplayService {
-    *storeprocessor:Service;
+    *msgstore:Service;
 
     private final Channel channel;
 
@@ -38,7 +34,7 @@ isolated service class ReplayService {
         self.channel = channel;
     }
 
-    public isolated function onMessage(anydata message) returns error? {
+    isolated remote function onMessage(anydata message) returns error? {
         Message|error replayableMessage = message.toJson().fromJsonWithType();
         if replayableMessage is error {
             log:printError("error converting message to replayable type", 'error = replayableMessage);

@@ -1,7 +1,7 @@
 import ballerina/log;
 import ballerina/uuid;
 
-import tharmigan/messaging.storeprocessor;
+import tharmigan/msgstore;
 
 # Represents the flow of the message in the channel, which includes the source flow and the destinations flow.
 #
@@ -19,7 +19,7 @@ public type MessageFlow record {|
 # + replayListenerConfig - The configuration for replaying messages in the channel
 public type ChannelConfiguration record {|
     *MessageFlow;
-    storeprocessor:MessageStore failureStore?;
+    msgstore:MessageStore failureStore?;
     ReplayListenerConfiguration replayListenerConfig?;
 |};
 
@@ -30,9 +30,9 @@ public type ChannelConfiguration record {|
 #  + deadLetterStore - The store to use for storing messages that could not be processed 
 # after the maximum number of replay attempts
 public type ReplayListenerConfiguration record {|
-    *storeprocessor:ListenerConfiguration;
-    storeprocessor:MessageStore replayStore?;
-    storeprocessor:MessageStore deadLetterStore?;
+    *msgstore:ListenerConfiguration;
+    msgstore:MessageStore replayStore?;
+    msgstore:MessageStore deadLetterStore?;
 |};
 
 isolated class SkippedDestination {
@@ -53,7 +53,7 @@ isolated class SkippedDestination {
 public isolated class Channel {
     final readonly & Processor[] sourceProcessors;
     final readonly & (DestinationRouter|DestinationWithProcessors[]) destinations;
-    private storeprocessor:MessageStore? failureStore = ();
+    private msgstore:MessageStore? failureStore = ();
     private string name;
 
     # Initializes a new instance of Channel with the provided processors and destination.
@@ -107,7 +107,7 @@ public isolated class Channel {
     # Get the failure store of the channel.
     #
     # + return - Returns the failure store of the channel, or a nil value if no failure store is defined
-    public isolated function getFailureStore() returns storeprocessor:MessageStore? {
+    public isolated function getFailureStore() returns msgstore:MessageStore? {
         lock {
             return self.failureStore;
         }
@@ -146,12 +146,12 @@ public isolated class Channel {
     }
 
     isolated function storeFailedMessage(ExecutionError executionError, MessageContext msgContext) {
-        storeprocessor:MessageStore? failureStore = self.getFailureStore();
+        msgstore:MessageStore? failureStore = self.getFailureStore();
         if failureStore is () {
             log:printDebug("no failure store is defined, skipping storing the failed message", msgId = msgContext.getId(), channel = self.getName());
             return;
         }
-        error? storeResult = failureStore.store(executionError.detail().message);
+        error? storeResult = failureStore->store(executionError.detail().message);
         if storeResult is error {
             log:printError("failed to store the message in the failure store", msgId = msgContext.getId(), channel = self.getName(), 'error = storeResult);
         }

@@ -2,17 +2,17 @@ import ballerina/log;
 import ballerinax/health.fhir.r4;
 import ballerinax/health.fhir.r4utils.ccdatofhir;
 
-import tharmigan/messaging.replayablechannel;
+import tharmigan/channel;
 import ballerina/http;
 
 public type CCDAData record {
     string ccdaStr;
 };
 
-@replayablechannel:TransformerConfig {
+@channel:TransformerConfig {
     name: "CCDADataTransformer"
 }
-isolated function transformToCCDAData(replayablechannel:MessageContext ctx) returns anydata|error {
+isolated function transformToCCDAData(channel:MessageContext ctx) returns anydata|error {
     anydata payload = ctx.getContent();
     CCDAData|error ccdaDataRecord = payload.cloneWithType();
     if ccdaDataRecord is error {
@@ -36,10 +36,10 @@ isolated function transformToCCDAData(replayablechannel:MessageContext ctx) retu
 
 final http:Client httpEndpoint = check new ("http://localhost:8080/api/v1");
 
-@replayablechannel:DestinationConfig {
+@channel:DestinationConfig {
     name: "HttpEndpoint"
 }
-isolated function sendToHttpEp(replayablechannel:MessageContext ctx) returns json|error {
+isolated function sendToHttpEp(channel:MessageContext ctx) returns json|error {
     json payload = ctx.getContent().toJson();
     return httpEndpoint->/patients.post(payload);
 }

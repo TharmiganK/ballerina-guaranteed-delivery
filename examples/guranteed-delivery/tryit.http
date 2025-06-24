@@ -1,0 +1,28 @@
+/*
+### Try Service: 'api' (http://localhost:9090/api)
+
+*/
+/*
+#### POST /messages
+
+*/
+POST http://localhost:9090/api/messages
+Content-Type: application/json
+
+# Modify the JSON payload as needed
+#
+# Expected schema:
+#   object
+#   - id: string
+#   - content: string
+
+{
+  "id": "12345",
+  "content": "Hello, World!"
+}
+
+HTTP/1.1 202  - Accepted
+content-length: 0
+connection: close
+server: ballerina
+date: Fri, 20 Jun 2025 10:39:57 +0530

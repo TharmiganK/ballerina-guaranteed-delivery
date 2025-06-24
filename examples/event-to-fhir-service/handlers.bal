@@ -9,12 +9,12 @@ import ballerinax/health.fhir.r4utils.ccdatofhir;
 import ballerinax/health.fhir.r4.validator;
 // import ballerinax/health.hl7v2.utils.v2tofhirr4;
 
-import tharmigan/messaging.replayablechannel;
+import tharmigan/channel;
 
-@replayablechannel:FilterConfig {
+@channel:FilterConfig {
     name: "EventDataTypeFilter"
 }
-isolated function hasEventDataType(replayablechannel:MessageContext ctx) returns boolean|error {
+isolated function hasEventDataType(channel:MessageContext ctx) returns boolean|error {
     HealthDataEvent healthDataEvent = check ctx.getContent().toJson().fromJsonWithType();
     log:printInfo("health data event received", eventId = healthDataEvent.eventId);
     string? dataType = healthDataEvent?.dataType;
@@ -26,18 +26,18 @@ isolated function hasEventDataType(replayablechannel:MessageContext ctx) returns
     return false;
 }
 
-@replayablechannel:TransformerConfig {
+@channel:TransformerConfig {
     name: "ExtractPayloadTransformer"
 }
-isolated function extractPayload(replayablechannel:MessageContext ctx) returns anydata|error {
+isolated function extractPayload(channel:MessageContext ctx) returns anydata|error {
     HealthDataEvent healthDataEvent = check ctx.getContent().toJson().fromJsonWithType();
     return healthDataEvent?.payload;
 }
 
-@replayablechannel:ProcessorRouterConfig {
+@channel:ProcessorRouterConfig {
     name: "DataTypeRouter"
 }
-isolated function routeByDataType(replayablechannel:MessageContext ctx) returns replayablechannel:Processor|error? {
+isolated function routeByDataType(channel:MessageContext ctx) returns channel:Processor|error? {
     if !ctx.hasProperty("dataType") {
         log:printError("data type is not present in the health data event");
         return;
@@ -61,10 +61,10 @@ isolated function routeByDataType(replayablechannel:MessageContext ctx) returns 
     }
 }
 
-@replayablechannel:TransformerConfig {
+@channel:TransformerConfig {
     name: "PatientDataTransformer"
 }
-isolated function transformToPatientData(replayablechannel:MessageContext ctx) returns international401:Patient|error {
+isolated function transformToPatientData(channel:MessageContext ctx) returns international401:Patient|error {
     anydata payload = ctx.getContent();
     // return payload;
     Patient|error patientData = payload.cloneWithType();
@@ -79,10 +79,10 @@ isolated function transformToPatientData(replayablechannel:MessageContext ctx) r
     return fhirPayload;
 }
 
-// @replayablechannel:TransformerConfig {
+// @channel:TransformerConfig {
 //     name: "HL7DataTransformer"
 // }
-// isolated function transformToHL7Data(replayablechannel:MessageContext ctx) returns map<anydata>|error {
+// isolated function transformToHL7Data(channel:MessageContext ctx) returns map<anydata>|error {
 //     anydata payload = ctx.getContent();
 //     HL7Data|error hl7Data = payload.cloneWithType();
 //     if hl7Data is error {
@@ -106,10 +106,10 @@ isolated function transformToPatientData(replayablechannel:MessageContext ctx) r
 //     return r4:createFHIRError("Error occurred while mapping HL7 data to FHIR", r4:ERROR, r4:INVALID);
 // }
 
-@replayablechannel:TransformerConfig {
+@channel:TransformerConfig {
     name: "CCDADataTransformer"
 }
-isolated function transformToCCDAData(replayablechannel:MessageContext ctx) returns anydata|error {
+isolated function transformToCCDAData(channel:MessageContext ctx) returns anydata|error {
     anydata payload = ctx.getContent();
     CCDAData|error ccdaDataRecord = payload.cloneWithType();
     if ccdaDataRecord is error {
@@ -131,10 +131,10 @@ isolated function transformToCCDAData(replayablechannel:MessageContext ctx) retu
     return r4:createFHIRError("No Patient resource found in the CCDA data", r4:ERROR, r4:INVALID);
 }
 
-@replayablechannel:DestinationConfig {
+@channel:DestinationConfig {
     name: "FHIRServer"
 }
-isolated function sendToFHIRServer(replayablechannel:MessageContext ctx) returns json|error {
+isolated function sendToFHIRServer(channel:MessageContext ctx) returns json|error {
     anydata payload = ctx.getContent();
     log:printInfo("sending data to FHIR server");
     r4:FHIRError|fhir:FHIRResponse response = createResource(payload.toJson());
@@ -146,10 +146,10 @@ isolated function sendToFHIRServer(replayablechannel:MessageContext ctx) returns
     return response;
 }
 
-@replayablechannel:DestinationConfig {
+@channel:DestinationConfig {
     name: "FileWriter"
 }
-isolated function writePayloadToFile(replayablechannel:MessageContext ctx) returns error? {
+isolated function writePayloadToFile(channel:MessageContext ctx) returns error? {
     json payload = ctx.getContent().toJson();
     string filePath = "./processed_data/" + ctx.getId() + ".json";
     if check file:test(filePath, file:EXISTS) {
@@ -159,10 +159,10 @@ isolated function writePayloadToFile(replayablechannel:MessageContext ctx) retur
     log:printInfo("payload written to file", filePath = filePath);
 }
 
-@replayablechannel:DestinationConfig {
+@channel:DestinationConfig {
     name: "HttpEndpoint"
 }
-isolated function sendToHttpEp(replayablechannel:MessageContext ctx) returns json|error {
+isolated function sendToHttpEp(channel:MessageContext ctx) returns json|error {
     json payload = ctx.getContent().toJson();
     return httpEndpoint->/patients.post(payload);
 }

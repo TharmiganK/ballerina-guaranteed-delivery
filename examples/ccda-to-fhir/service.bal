@@ -1,7 +1,7 @@
 import ballerina/http;
 import ballerina/log;
 
-import tharmigan/messaging.replayablechannel;
+import tharmigan/channel;
 
 listener http:Listener httpListener = new (9090);
 
@@ -12,24 +12,24 @@ service / on httpListener {
     }
 
     resource function post messages(CCDAData[] messages) returns json|error? {
-        json[] createdResources = [];
+        json[] responses = [];
         foreach var message in messages {
-            replayablechannel:ExecutionResult|replayablechannel:ExecutionError result = msgChannel.execute(message);
-            if result is replayablechannel:ExecutionError {
+            channel:ExecutionResult|channel:ExecutionError result = msgChannel.execute(message);
+            if result is channel:ExecutionError {
                 log:printError("error processing message", 'error = result);
                 continue;
             }
-            if !result.destinationResults.hasKey("FHIRServer") {
-                log:printWarn("FHIRServer destination not found in the result");
+            if !result.destinationResults.hasKey("HttpEndpoint") {
+                log:printWarn("HttpEndpoint destination not found in the result");
                 continue;
             }
-            json createdResource = check result.destinationResults["FHIRServer"].ensureType();
-            createdResources.push(createdResource);
+            json createdResource = check result.destinationResults["HttpEndpoint"].ensureType();
+            responses.push(createdResource);
         }
-        if createdResources.length() == 0 {
-            return error("Failed to create resources");
+        if responses.length() == 0 {
+            return error("Failed  to process any messages");
         }
-        // Return the created resources
-        return {createdResources: createdResources};
+        log:printInfo("Processed messages successfully", 'responses = responses);
+        return {responses: responses};
     }
 }

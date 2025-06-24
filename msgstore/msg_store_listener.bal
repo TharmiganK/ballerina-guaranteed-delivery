@@ -1,6 +1,6 @@
+import ballerina/lang.runtime;
 import ballerina/log;
 import ballerina/task;
-import ballerina/lang.runtime;
 
 # Represents the message store listener configuration,
 #
@@ -42,11 +42,10 @@ public isolated class Listener {
         if config.retryInterval <= 0d {
             return error("retryInterval must be greater than zero");
         }
+        ListenerConfiguration {deadLetterStore, ...otherConfig} = config;
         self.config = {
-            pollingInterval: config.pollingInterval,
-            maxRetries: config.maxRetries,
-            dropMessageAfterMaxRetries: config.dropMessageAfterMaxRetries,
-            deadLetterStore: config.deadLetterStore
+            ...otherConfig.clone(),
+            deadLetterStore
         };
     }
 
@@ -70,6 +69,14 @@ public isolated class Listener {
     # + return - An error if the service could not be detached, or a nil value
     public isolated function detach(Service msgStoreService) returns error? {
         lock {
+            task:JobId? pollJobId = self.pollJobId;
+            if pollJobId is task:JobId {
+                error? stopResult = task:unscheduleJob(pollJobId);
+                if stopResult is error {
+                    return error("failed to detach the service", cause = stopResult);
+                }
+            }
+
             Service? currentService = self.messageStoreService;
             if currentService is () {
                 return error("no messageStoreService is attached");
@@ -100,10 +107,18 @@ public isolated class Listener {
         }
     }
 
-    # Gracefully stops the message store listener.
+    # Gracefully stops the message store listener by waiting for any ongoing processing to complete before stopping.
+    # This is not implemented yet, and currently this will call immediateStop.
     #
     # + return - An error if the listener could not be stopped, or a nil value
     public isolated function gracefulStop() returns error? {
+        return self.immediateStop();
+    }
+
+    # Immediately stops the message store listener without waiting for any ongoing processing to complete.
+    #
+    # + return - An error if the listener could not be stopped, or `()`.
+    public isolated function immediateStop() returns error? {
         lock {
             task:JobId? pollJobId = self.pollJobId;
             if pollJobId is () {
@@ -118,14 +133,6 @@ public isolated class Listener {
         }
     }
 
-    # Immediately stops the message store listener without waiting for any ongoing processing to complete.
-    # This is not implemented yet and will call gracefulStop.
-    #
-    # + return - An error if the listener could not be stopped, or `()`.
-    public isolated function immediateStop() returns error? {
-        return self.gracefulStop();
-    }
-
 }
 
 isolated class PollAndProcessMessages {
@@ -133,64 +140,62 @@ isolated class PollAndProcessMessages {
 
     private final MessageStore messageStore;
     private final Service messageStoreService;
-    private final decimal pollingInterval;
-    private final int maxRetries;
-    private final boolean dropMessageAfterMaxRetries;
-    private final decimal retryInterval;
+    private final readonly & record {*ListenerConfiguration; never deadLetterStore?;} config;
     private MessageStore? deadLetterStore = ();
 
     public isolated function init(MessageStore messageStore, Service messageStoreService,
             ListenerConfiguration config) {
         self.messageStore = messageStore;
         self.messageStoreService = messageStoreService;
-        self.pollingInterval = config.pollingInterval;
-        self.maxRetries = config.maxRetries;
-        self.retryInterval = config.retryInterval;
-        self.dropMessageAfterMaxRetries = config.dropMessageAfterMaxRetries;
-        self.deadLetterStore = config.deadLetterStore;
+        ListenerConfiguration {deadLetterStore, ...otherConfig} = config;
+        self.deadLetterStore = deadLetterStore;
+        self.config = otherConfig.cloneReadOnly();
     }
 
-    public isolated function ackMessage(boolean success = true) {
-        error? result = self.messageStore.acknowledge(success);
+    public isolated function ackMessage(string id, boolean success = true) {
+        error? result = self.messageStore->acknowledge(id, success);
         if result is error {
             log:printError("failed to acknowledge message", 'error = result);
         }
     }
 
     public isolated function execute() {
-        anydata|error message = self.messageStore.retrieve();
+        Message|error? message = self.messageStore->retrieve();
         if message is error {
             log:printError("error polling messages", 'error = message);
             return;
         }
         if message is () {
-            log:printDebug("empty message, nothing to process");
+            log:printDebug("found empty message, skipping processing");
             return;
         }
 
-        error? result = trap self.messageStoreService.onMessage(message);
+        anydata content = message.content;
+        string id = message.id;
+
+        error? result = trap self.messageStoreService->onMessage(content);
         if result is () {
-            log:printDebug("message processed successfully", payload = message);
-            self.ackMessage();
+            log:printDebug("message processed successfully", id = id);
+            self.ackMessage(id);
             return;
         }
         log:printError("error processing message", 'error = result);
 
-        if self.maxRetries <= 0 {
-            log:printDebug("no retries configured", payload = message);
+        if self.config.maxRetries <= 0 {
+            log:printDebug("no retries configured", id = id);
         } else {
-            int retries = 0;
-            while retries < self.maxRetries {
-                error? retryResult = self.messageStoreService.onMessage(message.clone());
-                retries += 1;
+            foreach int attempt in 1 ... self.config.maxRetries {
+                error? retryResult = self.messageStoreService->onMessage(content);
                 if retryResult is error {
-                    log:printError("error processing message on retry", attempt = retries, 'error = retryResult);
+                    log:printError("error processing message on retry", retryAttempt = attempt, 'error = retryResult);
                 } else {
-                    log:printDebug("message processed successfully on retry", attempt = retries, payload = message);
-                    self.ackMessage();
+                    log:printDebug("message processed successfully on retry", retryAttempt = attempt, id = id);
+                    self.ackMessage(id);
                     return;
                 }
-                runtime:sleep(self.retryInterval);
+                if attempt != self.config.maxRetries {
+                    runtime:sleep(self.config.retryInterval);
+                }
             }
         }
         MessageStore? dls;
@@ -198,21 +203,21 @@ isolated class PollAndProcessMessages {
             dls = self.deadLetterStore;
         }
         if dls is MessageStore {
-            error? dlsResult = dls.store(message.clone());
+            error? dlsResult = dls->store(message.clone());
             if dlsResult is error {
                 log:printError("failed to store message in dead letter store", 'error = dlsResult);
             } else {
                 log:printDebug("message stored in dead letter store after max retries", payload = message);
-                self.ackMessage();
+                self.ackMessage(id);
                 return;
             }
         }
-        if self.dropMessageAfterMaxRetries {
+        if self.config.dropMessageAfterMaxRetries {
             log:printDebug("max retries reached, dropping message", payload = message);
         } else {
             log:printError("max retries reached, message is kept in the store", payload = message);
         }
-        self.ackMessage(self.dropMessageAfterMaxRetries);
+        self.ackMessage(id, self.config.dropMessageAfterMaxRetries);
     }
 }
 
@@ -223,5 +228,5 @@ public type Service distinct isolated service object {
     #
     # + message - The message to be processed
     # + return - An error if the message could not be processed, or a nil value
-    public isolated function onMessage(anydata message) returns error?;
+    isolated remote function onMessage(anydata message) returns error?;
 };

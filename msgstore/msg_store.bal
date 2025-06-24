@@ -4,32 +4,44 @@ import ballerina/log;
 import ballerina/uuid;
 import ballerinax/rabbitmq;
 
+# Represents the message content with a unique consumer ID.
+#
+# + id - The unique identifier for the consumer
+# + content - The actual message content
+public type Message record {|
+    string id;
+    anydata content;
+|};
+
 # Represents a message store interface for storing and retrieving messages.
-public type MessageStore isolated object {
+public type MessageStore isolated client object {
 
     # Stores a message in the message store.
     #
     # + message - The message to be stored
     # + return - An error if the message could not be stored, or `()`
-    public isolated function store(anydata message) returns error?;
+    isolated remote function store(anydata message) returns error?;
 
     # Retrieves the top message from the message store without removing it.
     #
-    # + return - The retrieved message, or nil if the store is empty, or an error if an error occurs
-    public isolated function retrieve() returns anydata|error;
+    # + return - The retrieved message, or `()` if the store is empty, or an error if an error occurs
+    isolated remote function retrieve() returns Message|error?;
 
-    # Acknowledges the processing of a message.
+    # Acknowledges the top message retrieved from the message store.
     #
-    # + success - Indicates whether the message was processed successfully
+    # + id - The unique identifier of the message to acknowledge. This should be the same as the `id`
+    # of the message retrieved from the store.
+    # + success - Indicates whether the message was processed successfully or not
     # + return - An error if the acknowledgment could not be processed, or `()`
-    public isolated function acknowledge(boolean success = true) returns error?;
+    isolated remote function acknowledge(string id, boolean success = true) returns error?;
 };
 
 # Represents an in-memory message store implementation.
-public isolated class InMemoryMessageStore {
+public isolated client class InMemoryMessageStore {
     *MessageStore;
 
     private anydata[] messages;
+    private map<anydata> receivedMessages = {};
     private final "FIFO"|"LIFO" mode;
 
     # Initializes a new instance of the InMemoryStore class
@@ -42,16 +54,17 @@ public isolated class InMemoryMessageStore {
     #
     # + message - The message to be stored
     # + return - An error if the message could not be stored, or `()`
-    public isolated function store(anydata message) returns error? {
+    isolated remote function store(anydata message) returns error? {
         lock {
             self.messages.push(message.clone());
         }
     }
 
-    # Retrieves the top message from the message store.
+    # Retrieves the top message from the message store. Retrieving concurrently without acknowledgment
+    # will result in the same message being returned until it is acknowledged.
     #
-    # + return - The retrieved message, or nil if the store is empty, or an error if an error occurs
-    public isolated function retrieve() returns anydata|error {
+    # + return - The retrieved message, or `()` if the store is empty, or an error if an error occurs
+    isolated remote function retrieve() returns Message|error? {
         lock {
             if self.messages.length() == 0 {
                 return;
@@ -62,55 +75,39 @@ public isolated class InMemoryMessageStore {
             } else {
                 message = self.messages.last();
             }
-            return message.clone();
+            string id = uuid:createType1AsString();
+            self.receivedMessages[id] = message.clone();
+            return {id, content: message.clone()};
         }
     }
 
-    # Clears all messages from the message store.
+    # Acknowledges the processing of a message.
     #
-    # + return - An error if the store could not be cleared, or `()`.
-    public isolated function clear() returns error? {
-        lock {
-            check trap self.messages.removeAll();
-        }
-    }
-
-    # Deletes the top message from the message store.
-    #
-    # + return - An error if the message could not be deleted, or `()`
-    isolated function delete() returns error? {
-        lock {
-            if self.messages.length() == 0 {
-                return;
-            }
-            if self.mode == "FIFO" {
-                _ = check trap self.messages.shift();
-            } else {
-                _ = check trap self.messages.pop();
-            }
-        }
-    }
-
-    # Acknowledges the processing of a message. When acknowledged with success, the message is 
-    # removed from the store.
-    #
+    # + id - The unique identifier of the message to acknowledge
     # + success - Indicates whether the message was processed successfully
     # + return - An error if the acknowledgment could not be processed, or `()`
-    public isolated function acknowledge(boolean success = true) returns error? {
-        if success {
-            error? result = self.delete();
-            if result is error {
-                return error("Failed to acknowledge message", cause = result);
+    isolated remote function acknowledge(string id, boolean success = true) returns error? {
+        lock {
+            if !self.receivedMessages.hasKey(id) {
+                return error("Message with the given ID not found", id = id);
             }
-        } else {
-            log:printDebug("message not acknowledged, keeping in store");
+            if success {
+                anydata message = self.receivedMessages.get(id);
+                int? index = self.mode == "FIFO" ? self.messages.indexOf(message) : self.messages.lastIndexOf(message);
+                if index is () {
+                    return error("Message with the given ID not found in the store", id = id);
+                }
+                _ = self.messages.remove(index);
+            } else {
+                log:printDebug("message not acknowledged, keeping in store");
+            }
+            return;
         }
-        return;
     }
 }
 
 # Represents a Local Directory message store implementation.
-public isolated class LocalDirectoryMessageStore {
+public isolated client class LocalDirectoryMessageStore {
     *MessageStore;
 
     private final string directoryName;
@@ -126,7 +123,7 @@ public isolated class LocalDirectoryMessageStore {
     #
     # + message - The message to be stored
     # + return - An error if the message could not be stored, or `()`
-    public isolated function store(anydata message) returns error? {
+    isolated remote function store(anydata message) returns error? {
         string uuid = uuid:createType1AsString();
         string filePath = self.directoryName + "/" + uuid + ".json";
         error? result = io:fileWriteJson(filePath, message.toJson());
@@ -135,10 +132,11 @@ public isolated class LocalDirectoryMessageStore {
         }
     }
 
-    # Retrieves the top message from the local file system message store without removing it.
+    # Retrieves the top message from the local file system message store without removing it. Retrieving
+    # concurrently without acknowledgment will result in the same message being returned until it is acknowledged.
     #
-    # + return - The retrieved message, or nil if the store is empty, or an error if an error occurs
-    public isolated function retrieve() returns anydata|error {
+    # + return - The retrieved message, or `()` if the store is empty, or an error if an error occurs
+    isolated remote function retrieve() returns Message|error? {
         file:MetaData[]|error files = file:readDir(self.directoryName);
         if files is error {
             return error("Failed to read directory", cause = files, directory = self.directoryName);
@@ -154,52 +152,20 @@ public isolated class LocalDirectoryMessageStore {
                 continue; // Skip files that cannot be read
             }
             // Return the first message found
-            return fileContent;
+            return {id: fileMetaData.absPath, content: fileContent};
         }
-    }
-
-    # Clears all messages from the local file system message store.
-    #
-    # + return - An error if the store could not be cleared, or `()`.
-    public isolated function clear() returns error? {
-        check file:remove(self.directoryName, option = file:RECURSIVE);
-    }
-
-    # Deletes the top message from the local file system message store.
-    #
-    # + return - An error if the message could not be deleted, or `()`
-    isolated function delete() returns error? {
-        file:MetaData[]|error files = file:readDir(self.directoryName);
-        if files is error {
-            return error("Failed to read directory", cause = files, directory = self.directoryName);
-        }
-
-        foreach file:MetaData fileMetaData in files {
-            if fileMetaData.dir == true || !fileMetaData.absPath.endsWith(".json") {
-                continue; // Skip directories and non-JSON files
-            }
-            json|error fileContent = io:fileReadJson(fileMetaData.absPath);
-            if fileContent is error {
-                log:printError("failed to read file", 'error = fileContent, filePath = fileMetaData.absPath);
-                continue; // Skip files that cannot be read
-            }
-            // Delete the first message found
-            error? result = file:remove(fileMetaData.absPath);
-            if result is error {
-                log:printError("failed to delete file", 'error = result, filePath = fileMetaData.absPath);
-                return error("Failed to delete message from local file system", cause = result, filePath = fileMetaData.absPath);
-            }
-        }
+        return;
     }
 
     # Acknowledges the processing of a message. When acknowledged with success, the message is
     # removed from the store.
     #
+    # + id - The file path of the message to acknowledge
     # + success - Indicates whether the message was processed successfully
     # + return - An error if the acknowledgment could not be processed, or `()`
-    public isolated function acknowledge(boolean success = true) returns error? {
+    isolated remote function acknowledge(string id, boolean success = true) returns error? {
         if success {
-            error? result = self.delete();
+            error? result = file:remove(id);
             if result is error {
                 return error("Failed to acknowledge message", cause = result);
             }
@@ -235,13 +201,13 @@ public type RabbitMqPublishConfiguration record {|
 |};
 
 # Represents a RabbitMQ message store implementation.
-public isolated class RabbitMqMessageStore {
+public isolated client class RabbitMqMessageStore {
     *MessageStore;
 
     private final rabbitmq:Client rabbitMqClient;
     private final readonly & RabbitMqPublishConfiguration publishConfig;
     private final string queueName;
-    private rabbitmq:AnydataMessage? consumedMessage = ();
+    private map<rabbitmq:AnydataMessage> consumedMessages;
     private final readonly & RabbitMqClientConfiguration clientConfig;
 
     # Initializes a new instance of the RabbitMqStore class.
@@ -253,13 +219,14 @@ public isolated class RabbitMqMessageStore {
         self.rabbitMqClient = check new (clientCofig.host, clientCofig.port, clientCofig.connectionData);
         self.publishConfig = clientCofig.publishConfig.cloneReadOnly();
         self.queueName = queueName;
+        self.consumedMessages = {};
     }
 
     # Stores a message in the RabbitMQ message store.
     #
     # + message - The message to be stored
     # + return - An error if the message could not be stored, or `()`
-    public isolated function store(anydata message) returns error? {
+    isolated remote function store(anydata message) returns error? {
         error? result = self.rabbitMqClient->publishMessage({
             content: message,
             routingKey: self.queueName,
@@ -271,16 +238,18 @@ public isolated class RabbitMqMessageStore {
         }
     }
 
-    # Retrieves the top message from the RabbitMQ message store without removing it.
+    # Retrieves the top message from the RabbitMQ message store without removing it. Retrieving
+    # concurrently without acknowledgment will return the next message in the queue if the previous one
+    # is not acknowledged.
     #
-    # + return - The retrieved message, or nil if the store is empty, or an error if an error occurs
-    public isolated function retrieve() returns anydata|error {
+    # + return - The retrieved message, or `()` if the store is empty, or an error if an error occurs
+    isolated remote function retrieve() returns Message|error? {
         lock {
             rabbitmq:AnydataMessage|error message = self.rabbitMqClient->consumeMessage(self.queueName, false);
             if message is error {
-                return;
+                return error("Failed to retrieve message from RabbitMQ", cause = message);
             }
-            self.consumedMessage = message;
+
             anydata content = message.content;
             if content is byte[] {
                 string|error fromBytes = string:fromBytes(content);
@@ -295,37 +264,31 @@ public isolated class RabbitMqMessageStore {
                     }
                 }
             }
-            return content.clone();
-        }
-    }
-
-    # Clears all messages from the RabbitMQ message store.
-    #
-    # + return - An error if the store could not be cleared, or `()`.
-    public isolated function clear() returns error? {
-        error? result = self.rabbitMqClient->queuePurge(self.queueName);
-        if result is error {
-            return error("Failed to clear RabbitMQ queue", cause = result);
+            string id = uuid:createType1AsString();
+            self.consumedMessages[id] = message.clone();
+            return {id, content: content.clone()};
         }
     }
 
     # Acknowledges the processing of a message. When acknowledged with success, the message is
     # removed from the store.
     #
+    # + id - The unique identifier of the message to acknowledge
     # + success - Indicates whether the message was processed successfully
     # + return - An error if the acknowledgment could not be processed, or `()`
-    public isolated function acknowledge(boolean success = true) returns error? {
+    isolated remote function acknowledge(string id, boolean success = true) returns error? {
         lock {
-            rabbitmq:AnydataMessage? message = self.consumedMessage;
-            if message is () {
-                return;
+            if !self.consumedMessages.hasKey(id) {
+                return error("Message with the given ID not found", id = id);
             }
+            rabbitmq:AnydataMessage message = self.consumedMessages.get(id);
             error? result;
             if success {
                 result = self.rabbitMqClient->basicAck(message);
             } else {
                 result = self.rabbitMqClient->basicNack(message);
             }
+            _ = self.consumedMessages.remove(id);
             if result is error {
                 return error("Failed to acknowledge message from RabbitMQ", cause = result);
             }

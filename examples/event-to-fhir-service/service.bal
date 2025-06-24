@@ -1,7 +1,7 @@
 import ballerina/http;
 import ballerina/log;
 
-import tharmigan/messaging.replayablechannel;
+import tharmigan/channel;
 
 listener http:Listener httpListener = new (9090);
 
@@ -14,8 +14,8 @@ service / on httpListener {
     resource function post events(HealthDataEvent[] events) returns json|error? {
         json[] createdResources = [];
         foreach var event in events {
-            replayablechannel:ExecutionResult|replayablechannel:ExecutionError result = msgChannel.execute(event);
-            if result is replayablechannel:ExecutionError {
+            channel:ExecutionResult|channel:ExecutionError result = msgChannel.execute(event);
+            if result is channel:ExecutionError {
                 log:printError("error processing event", 'error = result);
                 continue;
             }

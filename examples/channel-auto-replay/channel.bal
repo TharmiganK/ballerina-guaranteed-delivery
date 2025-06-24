@@ -1,10 +1,11 @@
-import tharmigan/messaging.replayablechannel;
-import tharmigan/messaging.storeprocessor;
+import tharmigan/channel;
+import tharmigan/msgstore;
 
-final storeprocessor:RabbitMqMessageStore failureStore = check new ("messages.bi.failure");
-final storeprocessor:RabbitMqMessageStore dlstore = check new ("messages.bi.dlq");
+final msgstore:RabbitMqMessageStore failureStore = check new ("messages.bi.failure");
+final msgstore:RabbitMqMessageStore replayStore = check new ("messages.bi.replay");
+final msgstore:RabbitMqMessageStore dlstore = check new ("messages.bi.dlq");
 
-final replayablechannel:Channel channel = check new (
+final channel:Channel channel = check new (
     name = "replayable-channel",
     sourceFlow = processMessage,
     destinationsFlow = [
@@ -13,8 +14,9 @@ final replayablechannel:Channel channel = check new (
     ],
     failureStore = failureStore,
     replayListenerConfig = {
-        maxRetries: 3,
-        pollingInterval: 10,
+        replayStore: replayStore,
+        maxRetries: 2,
+        pollingInterval: 5,
         deadLetterStore: dlstore
     }
 );
