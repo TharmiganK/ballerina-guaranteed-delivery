@@ -1,11 +1,11 @@
 import ballerina/http;
 
-configurable int port = 9090;
+listener http:Listener httpListener = new (9090);
 
-service /api on new http:Listener(port) {
+service /api on httpListener {
 
-    isolated resource function post messages(Message message) returns http:Ok|error {
+    isolated resource function post messages(Message message) returns http:Created|error {
         _ = check channel.execute(message);
-        return http:OK;
+        return http:CREATED;
     }
 }

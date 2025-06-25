@@ -14,12 +14,6 @@ isolated function processMessage(channel:MessageContext ctx) returns error? {
     log:printInfo("message processed successfully", id = ctx.getId());
 }
 
-isolated function processMessageNew(Message message, channel:MessageContext ctx) returns error? {
-    log:printInfo("processing message with ID: " + message.id);
-    // Simulate message processing
-    log:printInfo("message processed successfully", id = ctx.getId());
-}
-
 @channel:DestinationConfig {
     name: "FileWriter"
 }

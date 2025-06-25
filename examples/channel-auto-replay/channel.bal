@@ -16,6 +16,7 @@ final channel:Channel channel = check new (
     replayListenerConfig = {
         replayStore: replayStore,
         maxRetries: 2,
+        retryInterval: 2,
         pollingInterval: 5,
         deadLetterStore: dlstore
     }
