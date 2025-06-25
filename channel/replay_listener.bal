@@ -13,8 +13,14 @@ isolated function startReplayListener(Channel channel, ReplayListenerConfigurati
         return;
     }
     do {
-        msgstore:Listener replayListener = check new (targetStore, listenerConfig);
-        ReplayService replayService = new (channel);
+        msgstore:ListenerConfiguration replayListenerConfig = {
+            pollingInterval: listenerConfig.pollingInterval,
+            dropMessageAfterMaxRetries: listenerConfig.dropMessageAfterMaxRetries,
+            deadLetterStore: listenerConfig.deadLetterStore,
+            maxRetries: 0 // Retry logic is handled in the service where we use the updated message to replay
+        };
+        msgstore:Listener replayListener = check new (targetStore, replayListenerConfig);
+        ReplayService replayService = new (channel, maxRetries = listenerConfig.maxRetries, retryInterval = listenerConfig.retryInterval);
         check replayListener.attach(replayService);
         check replayListener.'start();
         runtime:registerListener(replayListener);
@@ -25,13 +31,20 @@ isolated function startReplayListener(Channel channel, ReplayListenerConfigurati
     }
 }
 
+type ServiceReplayConfiguration record {|
+    int maxRetries = 3;
+    decimal retryInterval = 1;
+|};
+
 isolated service class ReplayService {
     *msgstore:Service;
 
     private final Channel channel;
+    private final readonly & ServiceReplayConfiguration config;
 
-    isolated function init(Channel channel) {
+    isolated function init(Channel channel, *ServiceReplayConfiguration config) {
         self.channel = channel;
+        self.config = config.cloneReadOnly();
     }
 
     isolated remote function onMessage(anydata message) returns error? {
@@ -41,10 +54,25 @@ isolated service class ReplayService {
             return replayableMessage;
         }
 
-        ExecutionResult|error executionResult = self.channel.replay(replayableMessage);
-        if executionResult is error {
-            log:printError("error replaying message", 'error = executionResult);
-            return executionResult;
+        ExecutionResult|ExecutionError executionResult = self.channel.replay(replayableMessage);
+        if executionResult is ExecutionResult {
+            log:printDebug("message replayed successfully", id = replayableMessage.id);
+            return;
         }
+
+        Message newReplayableMessage = executionResult.detail().message;
+        foreach int attempt in 1 ... self.config.maxRetries {
+            ExecutionResult|ExecutionError executionResultOnRetry = self.channel.replay(newReplayableMessage);
+            if executionResultOnRetry is ExecutionResult {
+                log:printDebug("message replayed successfully", id = newReplayableMessage.id);
+                return;
+            }
+            newReplayableMessage = executionResultOnRetry.detail().message;
+            runtime:sleep(self.config.retryInterval);
+        }
+
+        log:printError("failed to replay message after retries", id = newReplayableMessage.id,
+                'error = executionResult);
+        return error("Failed to replay message after retries", executionResult);
     }
 }
