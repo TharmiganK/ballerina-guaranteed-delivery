@@ -14,7 +14,7 @@ service / on httpListener {
     resource function post events(HealthDataEvent[] events) returns json|error? {
         json[] createdResources = [];
         foreach var event in events {
-            channel:ExecutionResult|channel:ExecutionError result = msgChannel.execute(event);
+            channel:ExecutionResult|channel:ExecutionError result = msgChannel->execute(event);
             if result is channel:ExecutionError {
                 log:printError("error processing event", 'error = result);
                 continue;

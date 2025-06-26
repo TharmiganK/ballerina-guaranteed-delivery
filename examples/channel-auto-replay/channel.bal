@@ -1,6 +1,8 @@
 import tharmigan/channel;
 import tharmigan/msgstore;
+import ballerina/http;
 
+final http:Client httpEndpoint = check new ("http://localhost:8080/api/v1");
 final msgstore:RabbitMqMessageStore failureStore = check new ("messages.bi.failure");
 final msgstore:RabbitMqMessageStore replayStore = check new ("messages.bi.replay");
 final msgstore:RabbitMqMessageStore dlstore = check new ("messages.bi.dlq");

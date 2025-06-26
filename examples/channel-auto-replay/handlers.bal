@@ -2,7 +2,6 @@ import tharmigan/channel;
 import ballerina/log;
 import ballerina/file;
 import ballerina/io;
-import ballerina/http;
 
 @channel:ProcessorConfig {
     name: "MsgProcessor"
@@ -31,7 +30,6 @@ isolated function writePayloadToFile(channel:MessageContext ctx) returns error? 
     name: "HttpEndpoint"
 }
 isolated function sendToHttpEp(channel:MessageContext ctx) returns json|error {
-    http:Client httpEndpoint = check new ("http://localhost:8080/api/v1");
     json payload = ctx.getContent().toJson();
     return httpEndpoint->/patients.post(payload);
 }

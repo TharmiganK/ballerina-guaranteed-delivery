@@ -14,7 +14,7 @@ service / on httpListener {
     resource function post messages(CCDAData[] messages) returns json|error? {
         json[] responses = [];
         foreach var message in messages {
-            channel:ExecutionResult|channel:ExecutionError result = msgChannel.execute(message);
+            channel:ExecutionResult|channel:ExecutionError result = msgChannel->execute(message);
             if result is channel:ExecutionError {
                 log:printError("error processing message", 'error = result);
                 continue;
