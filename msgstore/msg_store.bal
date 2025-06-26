@@ -247,6 +247,9 @@ public isolated client class RabbitMqMessageStore {
         lock {
             rabbitmq:AnydataMessage|error message = self.rabbitMqClient->consumeMessage(self.queueName, false);
             if message is error {
+                if message.message().startsWith("No messages are found") {
+                    return; // No messages available in the queue
+                }
                 return error("Failed to retrieve message from RabbitMQ", cause = message);
             }
 
