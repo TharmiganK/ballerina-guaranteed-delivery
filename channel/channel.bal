@@ -50,7 +50,7 @@ isolated class SkippedDestination {
 };
 
 # Channel is a collection of processors and destination that can process messages in a defined flow.
-public isolated class Channel {
+public isolated client class Channel {
     final readonly & Processor[] sourceProcessors;
     final readonly & (DestinationRouter|DestinationWithProcessors[]) destinations;
     private msgstore:MessageStore? failureStore = ();
@@ -118,7 +118,7 @@ public isolated class Channel {
     # + skipFailureStore - If true, the failure store will not be used to store the failed message. Default is true
     # + message - The message to replay process
     # + return - Returns an error if the message could not be processed, otherwise returns the execution result
-    public isolated function replay(Message message, boolean skipFailureStore = true) returns ExecutionResult|ExecutionError {
+    isolated remote function replay(Message message, boolean skipFailureStore = true) returns ExecutionResult|ExecutionError {
         MessageContext msgContext = new (message);
         log:printDebug("replay channel execution started", msgId = msgContext.getId());
         msgContext.cleanErrorInfoForReplay();
@@ -134,7 +134,7 @@ public isolated class Channel {
     # + content - The message content to be processed
     # + skipDestinations - An array of destination names to skip during execution
     # + return - Returns the execution result or an error if the processing failed
-    public isolated function execute(anydata content, string[] skipDestinations = []) returns ExecutionResult|ExecutionError {
+    isolated remote function execute(anydata content, string[] skipDestinations = []) returns ExecutionResult|ExecutionError {
         string id = uuid:createType1AsString();
         MessageContext msgContext = new (id = id, content = content, metadata = {skipDestinations: skipDestinations});
         log:printDebug("channel execution started", msgId = id);

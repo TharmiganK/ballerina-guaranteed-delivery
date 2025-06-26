@@ -54,7 +54,7 @@ isolated service class ReplayService {
             return replayableMessage;
         }
 
-        ExecutionResult|ExecutionError executionResult = self.channel.replay(replayableMessage);
+        ExecutionResult|ExecutionError executionResult = self.channel->replay(replayableMessage);
         if executionResult is ExecutionResult {
             log:printDebug("message replayed successfully", id = replayableMessage.id);
             return;
@@ -62,7 +62,7 @@ isolated service class ReplayService {
 
         Message newReplayableMessage = executionResult.detail().message;
         foreach int attempt in 1 ... self.config.maxRetries {
-            ExecutionResult|ExecutionError executionResultOnRetry = self.channel.replay(newReplayableMessage);
+            ExecutionResult|ExecutionError executionResultOnRetry = self.channel->replay(newReplayableMessage);
             if executionResultOnRetry is ExecutionResult {
                 log:printDebug("message replayed successfully", id = newReplayableMessage.id);
                 return;
