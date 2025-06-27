@@ -1,5 +1,5 @@
-import tharmigan/msgstore;
 import tharmigan/channel;
+import tharmigan/msgstore;
 
 configurable "in-memory"|"rabbitmq"|"directory" storeType = "directory";
 
@@ -23,12 +23,14 @@ final channel:Channel msgChannel = check new (
     name = "ccda-to-fhir-channel",
     sourceFlow = transformToCCDAData,
     destinationsFlow = sendToHttpEp,
-    failureStore = failureStore,
-    replayListenerConfig = {
-        replayStore,
-        deadLetterStore,
-        maxRetries: 3,
-        retryInterval: 20,
-        pollingInterval: 10
+    failureConfig = {
+        failureStore:  failureStore,
+        replayListenerConfig:  {
+            replayStore,
+            deadLetterStore,
+            maxRetries: 3,
+            retryInterval: 20,
+            pollingInterval: 10
+        }
     }
 );

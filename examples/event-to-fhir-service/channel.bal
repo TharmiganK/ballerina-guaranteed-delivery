@@ -31,11 +31,13 @@ final channel:Channel msgChannel = check new (
         writePayloadToFile,
         sendToHttpEp
     ],
-    failureStore = failureStore,
-    replayListenerConfig = {
-        replayStore,
-        deadLetterStore,
-        maxRetries: 3,
-        pollingInterval: 10
+    failureConfig = {
+        failureStore: failureStore,
+        replayListenerConfig: {
+            replayStore,
+            deadLetterStore,
+            maxRetries: 3,
+            pollingInterval: 10
+        }
     }
 );

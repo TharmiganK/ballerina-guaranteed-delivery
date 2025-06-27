@@ -1,6 +1,7 @@
+import ballerina/http;
+
 import tharmigan/channel;
 import tharmigan/msgstore;
-import ballerina/http;
 
 final http:Client httpEndpoint = check new ("http://localhost:8080/api/v1");
 final msgstore:RabbitMqMessageStore failureStore = check new ("messages.bi.failure");
@@ -14,12 +15,14 @@ final channel:Channel channel = check new (
         writePayloadToFile,
         sendToHttpEp
     ],
-    failureStore = failureStore,
-    replayListenerConfig = {
-        replayStore: replayStore,
-        maxRetries: 2,
-        retryInterval: 2,
-        pollingInterval: 5,
-        deadLetterStore: dlstore
+    failureConfig = {
+        failureStore: failureStore,
+        replayListenerConfig:  {
+            replayStore: replayStore,
+            maxRetries: 2,
+            retryInterval: 2,
+            pollingInterval: 5,
+            deadLetterStore: dlstore
+        }
     }
 );
