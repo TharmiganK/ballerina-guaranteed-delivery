@@ -13,14 +13,21 @@ public type MessageFlow record {|
     DestinationsFlow destinationsFlow;
 |};
 
-# Represent the configuration for a channel.
-#
+# Represents the failure handler configuration for the channel.
+# 
 # + failureStore - The store to use for storing messages that failed to process
 # + replayListenerConfig - The configuration for replaying messages in the channel
+public type ChannelFailureHandlerConfig record {|
+    msgstore:MessageStore failureStore;
+    ReplayListenerConfiguration replayListenerConfig?;
+|};
+
+# Represent the configuration for a channel.
+#
+# + failureConfig - The configuration for handling failures in the channel
 public type ChannelConfiguration record {|
     *MessageFlow;
-    msgstore:MessageStore failureStore?;
-    ReplayListenerConfiguration replayListenerConfig?;
+    ChannelFailureHandlerConfig failureConfig?;
 |};
 
 # Represents the replay listener configuration for the channel.
@@ -88,8 +95,8 @@ public isolated client class Channel {
             self.destinations = destinationFlows.cloneReadOnly();
         }
 
-        self.failureStore = config.failureStore;
-        ReplayListenerConfiguration? replayListenerConfig = config.replayListenerConfig;
+        self.failureStore = config.failureConfig?.failureStore;
+        ReplayListenerConfiguration? replayListenerConfig = config.failureConfig?.replayListenerConfig;
         if replayListenerConfig is ReplayListenerConfiguration {
             check startReplayListener(self, replayListenerConfig);
         }
