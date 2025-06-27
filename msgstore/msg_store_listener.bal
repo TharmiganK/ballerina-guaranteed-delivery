@@ -203,7 +203,7 @@ isolated class PollAndProcessMessages {
             dls = self.deadLetterStore;
         }
         if dls is MessageStore {
-            error? dlsResult = dls->store(message.clone());
+            error? dlsResult = dls->store(content.clone());
             if dlsResult is error {
                 log:printError("failed to store message in dead letter store", 'error = dlsResult);
             } else {
