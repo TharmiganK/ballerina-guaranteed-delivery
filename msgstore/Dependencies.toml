@@ -172,7 +172,7 @@ modules = [
 [[package]]
 org = "tharmigan"
 name = "msgstore"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
 	{org = "ballerina", name = "file"},
 	{org = "ballerina", name = "io"},

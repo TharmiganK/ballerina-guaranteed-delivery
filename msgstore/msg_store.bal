@@ -36,48 +36,48 @@ public type MessageStore isolated client object {
     isolated remote function acknowledge(string id, boolean success = true) returns error?;
 };
 
-# Represents an in-memory message store implementation.
+type InMemoryMessage record {|
+    readonly string id;
+    anydata content;
+    boolean inFlight = false;
+|};
+
+# Represents an in-memory message store.
 public isolated client class InMemoryMessageStore {
     *MessageStore;
 
-    private anydata[] messages;
-    private map<anydata> receivedMessages = {};
-    private final "FIFO"|"LIFO" mode;
+    private InMemoryMessage[] messages;
 
-    # Initializes a new instance of the InMemoryStore class
-    public isolated function init("FIFO"|"LIFO" mode = "FIFO") {
+    # Initializes a new instance of the InMemoryStore.
+    public isolated function init() {
         self.messages = [];
-        self.mode = mode;
     }
 
     # Stores a message in the message store.
     #
     # + message - The message to be stored
-    # + return - An error if the message could not be stored, or `()`
-    isolated remote function store(anydata message) returns error? {
+    isolated remote function store(anydata message) {
         lock {
-            self.messages.push(message.clone());
+            string id = uuid:createType1AsString();
+            self.messages.push({id, content: message.clone()});
         }
     }
 
-    # Retrieves the top message from the message store. Retrieving concurrently without acknowledgment
-    # will result in the same message being returned until it is acknowledged.
+    # Retrieves the top message from the message store.
     #
-    # + return - The retrieved message, or `()` if the store is empty, or an error if an error occurs
-    isolated remote function retrieve() returns Message|error? {
+    # + return - The retrieved message, or `()` if the store is empty
+    isolated remote function retrieve() returns Message? {
         lock {
             if self.messages.length() == 0 {
                 return;
             }
-            anydata message;
-            if self.mode == "FIFO" {
-                message = self.messages.first();
-            } else {
-                message = self.messages.last();
+            foreach InMemoryMessage message in self.messages {
+                if !message.inFlight {
+                    message.inFlight = true;
+                    return {id: message.id, content: message.content.clone()};
+                }
             }
-            string id = uuid:createType1AsString();
-            self.receivedMessages[id] = message.clone();
-            return {id, content: message.clone()};
+            return;
         }
     }
 
@@ -88,20 +88,25 @@ public isolated client class InMemoryMessageStore {
     # + return - An error if the acknowledgment could not be processed, or `()`
     isolated remote function acknowledge(string id, boolean success = true) returns error? {
         lock {
-            if !self.receivedMessages.hasKey(id) {
-                return error("Message with the given ID not found", id = id);
+            InMemoryMessage[] targetMessage = from InMemoryMessage message in self.messages
+                where message.id == id && message.inFlight
+                limit 1
+                select message;
+            if targetMessage.length() == 0 {
+                return error("Message with the given ID not found or not in flight", id = id);
+            }
+
+            InMemoryMessage message = targetMessage[0];
+            int? targetIndex = self.messages.indexOf(message);
+            if targetIndex is () {
+                return error("Message with the given ID not found in the store", id = id);
             }
             if success {
-                anydata message = self.receivedMessages.get(id);
-                int? index = self.mode == "FIFO" ? self.messages.indexOf(message) : self.messages.lastIndexOf(message);
-                if index is () {
-                    return error("Message with the given ID not found in the store", id = id);
-                }
-                _ = self.messages.remove(index);
+                _ = self.messages.remove(targetIndex);
             } else {
-                log:printDebug("message not acknowledged, keeping in store");
+                log:printDebug("acknowledged with failure, message is kept in the store");
+                message.inFlight = false;
             }
-            return;
         }
     }
 }
